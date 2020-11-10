@@ -51,15 +51,28 @@ class Decoder(nn.Module):
         self.rnn = nn.LSTM(self.embed_dim, self.hidden_dim, self.num_layers, batch_first=True)
         self.lin_layer = nn.Linear(self.hidden_dim, self.vocab_size)
 
-    def forward(self, vis_feat, captions, lengths):
+    def forward(self, vis_feat, captions):
         """
         sizes:
-        visual features =
-        captions =
-        length =
+        visual features = batch_size x embed_dim
+        captions = batch_size x max_length
+        length = list of length max_length
         """
-        emb = self.embedding(captions)
-        #TODO
-        out = 1
+        # batch size
+        bs = captions.size(0)
 
-        return out
+        # get embeddings of captions
+        emb1 = self.embedding(captions)
+        emb2 = emb1.permute(1, 0, 2)        # length first
+        # combine visual features with embeddings
+        inp = torch.cat([vis_feat.unsqueeze(0), emb2], 0)
+        # rnn forward pass. Hidden states are initialised with zero since it is not differently defined
+        rnn_out1, _ = self.rnn(inp)
+        # do not take first output (this only takes in the visual features)
+        rnn_out2 = rnn_out1[1:]
+        # last linear layer
+        out1 = self.lin_layer(rnn_out2)
+        # transpose output to be of shape (batch_size, vocab_size, length)
+        out2 = out1.permute(1, 2, 0)
+
+        return out2

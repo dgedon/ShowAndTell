@@ -10,7 +10,7 @@ from PIL import Image
 from torchvision import transforms
 
 from dataloader import get_dataloaders
-from utils import train
+from utils import train, preprocess_images
 from vocabulary import Vocabulary
 from models import Encoder, Decoder
 
@@ -33,6 +33,8 @@ if __name__ == '__main__':
                         help='minimum number of word occurrences (default: 5)')
     # image parameters
     parser.add_argument('--path_images', default=os.getcwd() + '/data/train2014/',
+                        help='path to training images')
+    parser.add_argument('--path_images_preprocessed', default=os.getcwd() + '/data/preprocessed_train2014/',
                         help='path to training images')
     parser.add_argument('--img_resize', type=int, default=224,
                         help='resize images to size x size (default: 224)')
@@ -73,7 +75,7 @@ if __name__ == '__main__':
     tqdm.write("Using {}!".format(device))
 
     tqdm.write("Pre-process images...")
-    #TODO
+    preprocess_images(args)
     tqdm.write("Done!")
 
     tqdm.write("Construct / Load vocabulary...")
@@ -88,7 +90,7 @@ if __name__ == '__main__':
     mean = (0.485, 0.456, 0.406)
     std = (0.229, 0.224, 0.225)
     # get data and set loaders
-    train_loader = get_dataloaders(args, mean, std)
+    train_loader = get_dataloaders(args, vocab, mean, std)
     tqdm.write("Done!")
 
     tqdm.write("Initialise model...")
@@ -99,7 +101,9 @@ if __name__ == '__main__':
 
     tqdm.write("Define optimizer...")
     # for encoder do not use cnn as parameters, for decoder use all parameters
-    parameters = list(encoder.lin_layer.parameters) + list(encoder.batch_norm.parameters) + list(decoder.parameters())
+    parameters = list(encoder.lin_layer.parameters()) + \
+                 list(encoder.batch_norm.parameters()) + \
+                 list(decoder.parameters())
     optimizer = torch.optim.Adam(parameters, args.lr)
     tqdm.write("Done!")
 
@@ -110,11 +114,10 @@ if __name__ == '__main__':
     tqdm.write("Run training...")
     # initialisation of values
 
-    history = pd.DataFrame(columns=["epoch", "train_loss",])
+    history = pd.DataFrame(columns=["epoch", "train_loss"])
     # training can be interrupted by keyboard interrupt
     try:
-        best_val_loss = np.inf
-        for ep in range(args.epoch):
+        for ep in range(args.epochs):
             # run training
             train_loss, encoder, decoder = train(encoder, decoder, optimizer, loss_crit, train_loader, ep, device)
 
@@ -137,7 +140,7 @@ if __name__ == '__main__':
 
     tqdm.write("Test on image...")
     #TODO Load the trained model parameters
-    """encoder.load_state_dict(torch.load(args.encoder_path))
+    encoder.load_state_dict(torch.load(args.encoder_path))
     decoder.load_state_dict(torch.load(args.decoder_path))
     # Image preprocessing
     transform = transforms.Compose([
@@ -166,4 +169,4 @@ if __name__ == '__main__':
     # Print out the image and the generated caption
     print(sentence)
     image = Image.open(args.image)
-    plt.imshow(np.asarray(image))"""
+    plt.imshow(np.asarray(image))

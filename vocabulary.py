@@ -23,6 +23,9 @@ class Vocabulary(object):
         self.UNK = '<unk>'
 
     def build_vocab(self):
+        """
+        builds the vocabulary from the captions if the word in the caption occurs more often than 'threshold' times.
+        """
 
         # setup the data
         coco = COCO(self.path_captions)
@@ -49,6 +52,21 @@ class Vocabulary(object):
 
         # Build the string-to-integer map by just inverting the aforementioned map.
         self.str2idx = {token: i for i, token in enumerate(self.idx2str)}
+
+    def encode(self, token_list):
+        """
+        encodes a list of tokens to their idx, adds a start and end token idx.
+        """
+        unk_idx = self.str2idx[self.UNK]
+        encoded = [self.str2idx.get(token, unk_idx) for token in token_list]
+        return [self.str2idx[self.START]] + encoded + [self.str2idx[self.END]]
+
+    def decode(self, idx_list):
+        """
+        decodes a list of indices to tokens. Removes start and end token.
+        """
+        decoded = [self.idx2str[idx] for idx in idx_list]
+        return decoded[1:-1]
 
     def __len__(self):
         return len(self.str2idx)
