@@ -61,7 +61,7 @@ class ImageCaptionBatcher:
         # build the caption tensor. Pad the shorter captions
         captions = torch.as_tensor([caption + [self.pad_idx] * (max_length - len(caption)) for caption in caps])
 
-        return images, captions  # , cap_lengths
+        return images, captions
 
 
 def get_dataloaders(config, vocab, mean, std, shuffle=True):

@@ -8,9 +8,10 @@ import torch.nn as nn
 import pandas as pd
 from PIL import Image
 from torchvision import transforms
+import matplotlib.pyplot as plt
 
 from dataloader import get_dataloaders
-from utils import train, preprocess_images
+from utils import train, preprocess_images, save_model
 from vocabulary import Vocabulary
 from models import Encoder, Decoder
 
@@ -56,6 +57,12 @@ if __name__ == '__main__':
     # system settings
     parser.add_argument('--folder', default=os.getcwd() + '/trained_model1',
                         help='storage folder, where the model will be stored')
+    parser.add_argument('--save_hist_every', type=int, default=50,
+                        help='save the history as average of every n iterations (default: 50)')
+    parser.add_argument('--save_model_every', type=int, default=500,
+                        help='save the model after every n iterations (default: 500)')
+    parser.add_argument('--no_training', type=bool, default=True,
+                        help='if set True then no training but only evaluation is done (default: False)')
     args = parser.parse_args()
 
     tqdm.write("Set folder and save config...")
@@ -114,59 +121,73 @@ if __name__ == '__main__':
     tqdm.write("Run training...")
     # initialisation of values
 
-    history = pd.DataFrame(columns=["epoch", "train_loss"])
-    # training can be interrupted by keyboard interrupt
-    try:
-        for ep in range(args.epochs):
-            # run training
-            train_loss, encoder, decoder = train(encoder, decoder, optimizer, loss_crit, train_loader, ep, device)
+    if not args.no_training:
+        history = pd.DataFrame(columns=["epoch", "n_updates", "train_loss"])
+        # training can be interrupted by keyboard interrupt
+        try:
+            for ep in range(args.epochs):
+                # run training
+                encoder, decoder, optimizer, history = train(encoder, decoder, optimizer, loss_crit, train_loader,
+                                                             ep, device, history, args)
+                # save the model
+                save_model(ep, encoder, decoder, optimizer, args.folder)
+            tqdm.write("Training Done!")
 
-            # update and save history
-            history = history.append({"epoch": ep, "train_loss": train_loss}, ignore_index=True)
-            history.to_csv(os.path.join(args.folder, 'history.csv'), index=False)
+        except KeyboardInterrupt:
+            tqdm.write("Keyboard interrupt. Stop training!")
 
-            # save the model
-            torch.save({'epoch': ep,
-                        'encoder': encoder.state_dict(),
-                        'decoder': decoder.state_dict(),
-                        'optimizer': optimizer.state_dict()
-                        },
-                       os.path.join(args.folder, 'model.pth'))
-            tqdm.write("Save model!")
-        tqdm.write("Training Done!")
+    tqdm.write("Create and save loss figure...")
+    # open history file
+    df = pd.read_csv(os.path.join(args.folder, 'history.csv'))
+    # plot and save figure
+    plt.figure()
+    plt.plot(np.asarray(df.n_updates),np.asarray(df.train_loss), label='train loss')
+    plt.title('Training Curve')
+    plt.xlabel('updates')
+    plt.ylabel('CE Loss')
+    plt.legend()
+    plt.yscale('log')
+    # plt.show()
+    plt.savefig(os.path.join(args.folder, 'Training_curve'))
+    plt.close()
+    tqdm.write("Done!")
 
-    except KeyboardInterrupt:
-        tqdm.write("Keyboard interrupt. Stop training!")
-
-    tqdm.write("Test on image...")
-    #TODO Load the trained model parameters
-    encoder.load_state_dict(torch.load(args.encoder_path))
-    decoder.load_state_dict(torch.load(args.decoder_path))
+    tqdm.write("Test model on image...")
+    # load model
+    ckpt = torch.load(os.path.join(args.folder, 'model.pth'), map_location=lambda storage, loc: storage)
+    encoder.load_state_dict(ckpt["encoder"])
+    decoder.load_state_dict(ckpt["decoder"])
     # Image preprocessing
     transform = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize((0.485, 0.456, 0.406),
-                             (0.229, 0.224, 0.225))])
+        transforms.Normalize(mean, std),
+    ])
     # Prepare an image
     image = Image.open(args.path_test_image)
-    image = image.resize([224, 224], Image.ANTIALIAS)
+    image = image.resize([args.img_resize, args.img_resize], Image.ANTIALIAS)
     if transform is not None:
         image = transform(image).unsqueeze(0)
     image_tensor = image.to(device)
+    # set model to evaluation
+    encoder.eval()
+    decoder.eval()
     # Generate an caption from the image
-    feature = encoder(image_tensor)
-    sampled_ids = decoder.sample(feature)
+    vis_features = encoder(image_tensor)
+    sampled_ids = decoder.sample(vis_features)
 
-    # Convert word_ids to words
-    sampled_caption = []
-    for word_id in sampled_ids:
-        word = vocab.idx2str[word_id]
-        sampled_caption.append(word)
-        if word == '<end>':
-            break
-    sentence = ' '.join(sampled_caption)
+    # obtain sentence from word ids
+    tokens = vocab.decode(sampled_ids)
+    try:
+        # find end token
+        i = tokens.index(vocab.END)
+        # reduce list up to end token
+        tokens = tokens[:i]
+    except:
+        pass
+    # combine to sentence
+    sentence = ' '.join(tokens)
 
     # Print out the image and the generated caption
-    print(sentence)
-    image = Image.open(args.image)
+    tqdm.write("Generated image caption is: '{}'".format(sentence))
+    image = Image.open(args.path_test_image)
     plt.imshow(np.asarray(image))

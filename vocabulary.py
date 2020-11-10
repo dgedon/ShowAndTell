@@ -63,10 +63,9 @@ class Vocabulary(object):
 
     def decode(self, idx_list):
         """
-        decodes a list of indices to tokens. Removes start and end token.
+        decodes a list of indices to tokens.
         """
-        decoded = [self.idx2str[idx] for idx in idx_list]
-        return decoded[1:-1]
+        return [self.idx2str[idx] for idx in idx_list]
 
     def __len__(self):
         return len(self.str2idx)
