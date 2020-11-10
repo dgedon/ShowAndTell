@@ -1,6 +1,10 @@
 .idea/
 /__pycache__/
 
+# data
+/data
+/test_data
+
 # model storage folders
-/run*
+/trained_model*
 /server
