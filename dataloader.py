@@ -33,9 +33,9 @@ class MocoDataSet(Dataset):
         img_id = self.coco.anns[annotation_id]['image_id']
         img_name = self.coco.loadImgs(img_id)[0]['file_name']
 
-        img = Image.open(os.path.join(self.path_images, img_name)).convert('RGB')
+        image = Image.open(os.path.join(self.path_images, img_name)).convert('RGB')
         if self.transform is not None:
-            image = self.transform(img)
+            image = self.transform(image)
 
         return caption_idx, image
 
@@ -48,6 +48,8 @@ class ImageCaptionBatcher:
         self.pad_idx = vocab.str2idx[vocab.PAD]
 
     def __call__(self, data):
+        # Sort a data list by caption length (descending order).
+        data.sort(key=lambda x: len(x[0]), reverse=True)
         # unpack data
         caps, imgs = zip(*data)
 
@@ -61,7 +63,7 @@ class ImageCaptionBatcher:
         # build the caption tensor. Pad the shorter captions
         captions = torch.as_tensor([caption + [self.pad_idx] * (max_length - len(caption)) for caption in caps])
 
-        return images, captions
+        return images, captions, cap_lengths
 
 
 def get_dataloaders(config, vocab, mean, std, shuffle=True):
@@ -70,6 +72,7 @@ def get_dataloaders(config, vocab, mean, std, shuffle=True):
     path_captions = config.path_captions
 
     transform = transforms.Compose([
+        transforms.RandomCrop(config.img_rand_crop),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         transforms.Normalize(mean, std),

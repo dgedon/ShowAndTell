@@ -13,14 +13,14 @@ class Vocabulary(object):
         self.str2idx = []
         self.idx2str = []
 
-        # tokenizer
-        self.tokenizer = lambda s: nltk.tokenize.wordpunct_tokenize(s.lower())
-
         # special tokens
         self.PAD = '<pad>'
         self.START = '<start>'
         self.END = '<end>'
         self.UNK = '<unk>'
+
+    def tokenizer(self, inp):
+        return nltk.tokenize.word_tokenize(inp.lower())
 
     def build_vocab(self):
         """

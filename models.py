@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torchvision.models as models
+from torch.nn.utils.rnn import pack_padded_sequence
 
 
 class Encoder(nn.Module):
@@ -54,7 +55,7 @@ class Decoder(nn.Module):
         self.rnn = nn.LSTM(self.embed_dim, self.hidden_dim, self.num_layers, batch_first=True)
         self.lin_layer = nn.Linear(self.hidden_dim, self.vocab_size)
 
-    def forward(self, vis_feat, captions):
+    def forward(self, vis_feat, captions, lengths):
         """
         sizes:
         visual features = batch_size x embed_dim
@@ -62,20 +63,19 @@ class Decoder(nn.Module):
         length = list of length max_length
         """
         # get embeddings of captions
-        emb1 = self.embedding(captions)
-        emb2 = emb1.permute(1, 0, 2)  # length first
+        emb = self.embedding(captions)
         # combine visual features with embeddings
-        inp = torch.cat([vis_feat.unsqueeze(0), emb2], 0)
+        inp = torch.cat([vis_feat.unsqueeze(1), emb], 1)
+        # pack in packed sequence because of padding (otherwise we just learn padding)
+        inp_packed = pack_padded_sequence(inp, lengths, batch_first=True)
         # rnn forward pass. Hidden states are initialised with zero since it is not differently defined
-        rnn_out1, _ = self.rnn(inp)
-        # do not take first output (this only takes in the visual features)
-        rnn_out2 = rnn_out1[1:]
+        rnn_out1, _ = self.rnn(inp_packed)
+        # take the data out of the packed sequence
+        rnn_out2 = rnn_out1.data
         # last linear layer
-        out1 = self.lin_layer(rnn_out2)
-        # transpose output to be of shape (batch_size, vocab_size, length)
-        out2 = out1.permute(1, 2, 0)
+        output = self.lin_layer(rnn_out2)
 
-        return out2
+        return output
 
     def sample(self, vis_feat, hidden_rnn=None):
         # allocate sample ids
@@ -92,20 +92,7 @@ class Decoder(nn.Module):
             sample_ids.append(out_lin.argmax())
             # get embedding of this sample as new input
             inp = self.embedding(sample_ids[-1]).view(1, 1, -1)
-        # get list of samples
+        # generate list of samples
         sample = [id.item() for id in sample_ids]
-
-        """# Alternative
-        sampled_ids = []
-        inputs = vis_feat.unsqueeze(1)
-        for i in range(self.max_words):
-            out_rnn, hidden_rnn = self.rnn(inputs, hidden_rnn)  # hiddens: (batch_size, 1, hidden_size)
-            outputs = self.lin_layer(out_rnn.squeeze(1))  # outputs:  (batch_size, vocab_size)
-            _, predicted = outputs.max(1)  # predicted: (batch_size)
-            sampled_ids.append(predicted)
-            inputs = self.embedding(predicted)  # inputs: (batch_size, embed_size)
-            inputs = inputs.unsqueeze(1)  # inputs: (batch_size, 1, embed_size)
-        sampled_ids = torch.stack(sampled_ids, 1) 
-        """
 
         return sample

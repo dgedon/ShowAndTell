@@ -2,7 +2,9 @@ from tqdm import tqdm
 import torch
 import os
 from PIL import Image
+import numpy as np
 import sys
+from torch.nn.utils.rnn import pack_padded_sequence
 
 
 def train(encoder, decoder, optimizer, loss_fun, loader, ep, device, history, args):
@@ -11,27 +13,28 @@ def train(encoder, decoder, optimizer, loss_fun, loader, ep, device, history, ar
 
     # allocation
     total_loss = 0
-    n_total_entries = 0
+    n_total_updates = 0
     intermed_loss = 0
-    n_intermed_entries = 0
+    n_intermed_updates = 0
 
     # initialise progress bar
-    process_desc = "Epoch {:2d}: train - Loss: {:2.3e}"
-    progress_bar = tqdm(initial=0, leave=True, total=len(loader.dataset),
-                        desc=process_desc.format(ep, 0), position=0)
-    for (images, captions) in loader:
-        # current batch_size
-        bs = images.size(0)
+    process_desc = "Epoch {:2d}: Loss: {:2.3e}; Perplexity: {:.4f}"
+    progress_bar = tqdm(initial=0, leave=True, total=len(loader),
+                        desc=process_desc.format(ep, 0, 0), position=0)
+    for (images, captions, lengths) in loader:
         # to device
         images = images.to(device)
         captions = captions.to(device)
 
         # forward pass over model
         vis_features = encoder(images)
-        output = decoder(vis_features, captions)
+        output = decoder(vis_features, captions, lengths)
+
+        # get targets (packed because of padding of the captions)
+        targets = pack_padded_sequence(captions, lengths, batch_first=True)[0]
 
         # compute loss function
-        loss_val = loss_fun(output, captions)
+        loss_val = loss_fun(output, targets)
 
         # zero out the gradients
         decoder.zero_grad()
@@ -43,28 +46,28 @@ def train(encoder, decoder, optimizer, loss_fun, loader, ep, device, history, ar
         optimizer.step()
 
         # Update
-        loss_vall_cpu = loss_val.detach().cpu().numpy()
-        total_loss += loss_vall_cpu
-        n_total_entries += bs
-        intermed_loss += loss_vall_cpu
-        n_intermed_entries += bs
+        loss_val_cpu = loss_val.item()
+        total_loss += loss_val_cpu
+        n_total_updates += 1
+        intermed_loss += loss_val_cpu
+        n_intermed_updates += 1
 
-        # update and save history
-        if n_total_entries / args.batch_size % args.save_hist_every == 0:
-            history = history.append({"epoch": ep, "n_updates": ep * len(loader.dataset) + n_total_entries,
-                                      "train_loss": intermed_loss/ n_intermed_entries}, ignore_index=True)
+        # update history
+        if n_total_updates % args.save_hist_every == 0:
+            history = history.append({"epoch": ep, "n_updates": ep * len(loader) + n_total_updates,
+                                      "loss": intermed_loss / n_intermed_updates}, ignore_index=True)
             history.to_csv(os.path.join(args.folder, 'history.csv'), index=False)
             # reset variables
             intermed_loss = 0
-            n_intermed_entries = 0
+            n_intermed_updates = 0
 
         # save model
-        if n_total_entries / args.batch_size % args.save_model_every == 0:
+        if n_total_updates % args.save_model_every == 0:
             save_model(ep, encoder, decoder, optimizer, args.folder)
 
         # Update train bar
-        progress_bar.desc = process_desc.format(ep, loss_val / bs)
-        progress_bar.update(bs)
+        progress_bar.desc = process_desc.format(ep, loss_val_cpu, np.exp(loss_val_cpu))
+        progress_bar.update(1)
     progress_bar.close()
 
     return encoder, decoder, optimizer, history
@@ -119,4 +122,3 @@ def save_model(ep, encoder, decoder, optimizer, folder):
                 'optimizer': optimizer.state_dict()
                 },
                os.path.join(folder, 'model.pth'))
-    tqdm.write("Save model!")
