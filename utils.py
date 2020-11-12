@@ -50,7 +50,7 @@ def train(encoder, decoder, optimizer, loss_fun, loader, ep, device, history, ar
             # Optimize
             optimizer.step()
         else:
-            with torch.no_grad:
+            with torch.no_grad():
                 # forward pass over model
                 vis_features = encoder(images)
                 output = decoder(vis_features, captions, lengths)
@@ -71,7 +71,8 @@ def train(encoder, decoder, optimizer, loss_fun, loader, ep, device, history, ar
         # update history
         if n_total_updates % args.save_hist_every == 0:
             history = history.append({"epoch": ep, "n_updates": ep * len(loader) + n_total_updates,
-                                      "loss": intermed_loss / n_intermed_updates}, ignore_index=True)
+                                      "loss": intermed_loss / n_intermed_updates,
+                                      "perplexity": np.exp(intermed_loss / n_intermed_updates)}, ignore_index=True)
             history.to_csv(os.path.join(args.folder, 'history.csv'), index=False)
             # reset variables
             intermed_loss = 0
