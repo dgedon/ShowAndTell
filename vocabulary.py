@@ -2,11 +2,29 @@ import nltk
 from collections import Counter
 from pycocotools.coco import COCO
 from tqdm import tqdm
+import os
+import pickle
+
+
+def get_vocabulary(config):
+    # check if vocabulary exists, then load
+    try:
+        with open(os.path.join(config.folder, 'vocab.pkl'), 'rb') as f:
+            vocab = pickle.load(f)
+        tqdm.write("\tVocabulary already processed. Loading...")
+    except:
+        tqdm.write("\tStart processing vocabulary...")
+        # construct or load vocabulary
+        vocab = Vocabulary(config)
+        vocab.build_vocab()
+        with open(os.path.join(config.folder, 'vocab.pkl'), 'wb') as f:
+            pickle.dump(vocab, f)
+    return vocab
 
 
 class Vocabulary(object):
     def __init__(self, config):
-        self.path_captions = config.path_captions
+        self.path_captions = config.path_train_captions
         self.threshold = config.vocab_threshold
 
         # vocabulary (string to index; index to string lists)

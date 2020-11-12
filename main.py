@@ -1,7 +1,6 @@
 import json
 import argparse
 import os
-import pickle
 from tqdm import tqdm
 import numpy as np
 import torch
@@ -13,7 +12,7 @@ import matplotlib.pyplot as plt
 
 from dataloader import get_dataloaders
 from utils import train, preprocess_images, save_model
-from vocabulary import Vocabulary
+from vocabulary import get_vocabulary
 from models import Encoder, Decoder
 
 if __name__ == '__main__':
@@ -29,15 +28,21 @@ if __name__ == '__main__':
     parser.add_argument('--lr', type=float, default=1e-3,
                         help='learning rate (default: 1e-3)')
     # vocabulary parameters
-    parser.add_argument('--path_captions', default=os.getcwd() + '/data/annotations/captions_train2014.json',
-                        help='path to captions (annotations) of images')
+    parser.add_argument('--path_train_captions', default=os.getcwd() + '/data/annotations/captions_train2014.json',
+                        help='path to captions (annotations) of training images')
+    parser.add_argument('--path_valid_captions', default=os.getcwd() + '/data/annotations/captions_val2014.json',
+                        help='path to captions (annotations) of training images')
     parser.add_argument('--vocab_threshold', type=int, default=5,
                         help='minimum number of word occurrences (default: 5)')
     # image parameters
-    parser.add_argument('--path_images', default=os.getcwd() + '/data/train2014/',
+    parser.add_argument('--path_train_images', default=os.getcwd() + '/data/train2014/',
                         help='path to training images')
-    parser.add_argument('--path_images_preprocessed', default=os.getcwd() + '/data/preprocessed_train2014/',
+    parser.add_argument('--path_train_images_preprocessed', default=os.getcwd() + '/data/preprocessed_train2014/',
                         help='path to training images')
+    parser.add_argument('--path_valid_images', default=os.getcwd() + '/data/val2014/',
+                        help='path to validation images')
+    parser.add_argument('--path_valid_images_preprocessed', default=os.getcwd() + '/data/preprocessed_val2014/',
+                        help='path to validation images')
     parser.add_argument('--img_resize', type=int, default=256,
                         help='resize images to size x size (default: 256)')
     parser.add_argument('--img_rand_crop', type=int, default=224,
@@ -55,10 +60,10 @@ if __name__ == '__main__':
     # inference parameter
     parser.add_argument('--max_words', type=int, default=25,
                         help='maximal number of words per caption (default: 20)')
-    parser.add_argument('--path_test_image', default=os.getcwd() + '/test_data/example.png',
+    parser.add_argument('--path_test_image', default=os.getcwd() + '/data/test_data/example.png',
                         help='maximal number of words per caption (default: 20)')
     # system settings
-    parser.add_argument('--folder', default=os.getcwd() + '/trained_model1',
+    parser.add_argument('--folder', default=os.getcwd() + '/trained_model2',
                         help='storage folder, where the model will be stored')
     parser.add_argument('--save_hist_every', type=int, default=20,
                         help='save the history as average of every n iterations (default: 50)')
@@ -85,31 +90,24 @@ if __name__ == '__main__':
     tqdm.write("Using {}!".format(device))
 
     tqdm.write("\nPre-process images...")
-    preprocess_images(args)
+    preprocess_images(args.path_train_images, args.path_train_images_preprocessed, args.img_resize, 'train')
+    preprocess_images(args.path_valid_images, args.path_valid_images_preprocessed, args.img_resize, 'valid')
     tqdm.write("Done!")
 
     tqdm.write("\nConstruct / Load vocabulary...")
-    # check if vocabulary exists, then load
-    try:
-        with open(os.path.join(args.folder, 'vocab.pkl'), 'rb') as f:
-            vocab = pickle.load(f)
-        tqdm.write("\tVocabulary already processed. Loading...")
-    except:
-        tqdm.write("\tStart processing vocabulary...")
-        # construct or load vocabulary
-        vocab = Vocabulary(args)
-        vocab.build_vocab()
-        with open(os.path.join(args.folder, 'vocab.pkl'), 'wb') as f:
-            pickle.dump(vocab, f)
+    vocab = get_vocabulary(args)
     vocab_size = len(vocab)
     tqdm.write("Done!")
 
-    tqdm.write("\nSet train/test loader...")
+    tqdm.write("\nSet train/valid loader...")
     # channel wise empirical mean and std for normalisation
     mean = (0.485, 0.456, 0.406)
     std = (0.229, 0.224, 0.225)
     # get data and set loaders
-    train_loader = get_dataloaders(args, vocab, mean, std)
+    train_loader = get_dataloaders(args.path_train_images_preprocessed, args.path_train_captions,
+                                   args, vocab, mean, std)
+    valid_loader = get_dataloaders(args.path_valid_images_preprocessed, args.path_valid_captions,
+                                   args, vocab, mean, std)
     tqdm.write("Done!")
 
     tqdm.write("\nInitialise model...")
@@ -137,8 +135,17 @@ if __name__ == '__main__':
         try:
             for ep in range(args.epochs):
                 # run training
-                encoder, decoder, optimizer, history = train(encoder, decoder, optimizer, loss_crit, train_loader,
-                                                             ep, device, history, args)
+                train_loss, encoder, decoder, optimizer, history = train(encoder, decoder, optimizer, loss_crit,
+                                                                         train_loader, ep, device, history, args,
+                                                                         do_train=True)
+                # run validation
+                valid_loss, encoder, decoder, optimizer, history = train(encoder, decoder, optimizer, loss_crit,
+                                                                         valid_loader, ep, device, history, args,
+                                                                         do_train=False)
+
+                # write message
+                message = "\t\tTrain loss: {:2.3e}\t\tValid loss: {:2.3e}".format(train_loss, valid_loss)
+                tqdm.write(message)
 
                 # save the model
                 save_model(ep, encoder, decoder, optimizer, args.folder)
@@ -153,7 +160,7 @@ if __name__ == '__main__':
         df = pd.read_csv(os.path.join(args.folder, 'history.csv'))
         # plot and save figure
         plt.figure()
-        plt.plot(np.asarray(df.n_updates), np.asarray(df.train_loss), label='loss')
+        plt.plot(np.asarray(df.n_updates), np.asarray(df.loss), label='train_loss')
         plt.title('Training Curve')
         plt.xlabel('updates')
         plt.ylabel('CE Loss')

@@ -7,9 +7,13 @@ import sys
 from torch.nn.utils.rnn import pack_padded_sequence
 
 
-def train(encoder, decoder, optimizer, loss_fun, loader, ep, device, history, args):
-    encoder.train()
-    decoder.train()
+def train(encoder, decoder, optimizer, loss_fun, loader, ep, device, history, args, do_train=True):
+    if do_train:
+        encoder.train()
+        decoder.train()
+    else:
+        encoder.eval()
+        decoder.eval()
 
     # allocation
     total_loss = 0
@@ -26,24 +30,36 @@ def train(encoder, decoder, optimizer, loss_fun, loader, ep, device, history, ar
         images = images.to(device)
         captions = captions.to(device)
 
-        # forward pass over model
-        vis_features = encoder(images)
-        output = decoder(vis_features, captions, lengths)
+        if do_train:
+            # forward pass over model
+            vis_features = encoder(images)
+            output = decoder(vis_features, captions, lengths)
 
-        # get targets (packed because of padding of the captions)
-        targets = pack_padded_sequence(captions, lengths, batch_first=True)[0]
+            # get targets (packed because of padding of the captions)
+            targets = pack_padded_sequence(captions, lengths, batch_first=True)[0]
 
-        # compute loss function
-        loss_val = loss_fun(output, targets)
+            # compute loss function
+            loss_val = loss_fun(output, targets)
 
-        # zero out the gradients
-        decoder.zero_grad()
-        encoder.zero_grad()
+            # zero out the gradients
+            decoder.zero_grad()
+            encoder.zero_grad()
 
-        # Backward pass
-        loss_val.backward()
-        # Optimize
-        optimizer.step()
+            # Backward pass
+            loss_val.backward()
+            # Optimize
+            optimizer.step()
+        else:
+            with torch.no_grad:
+                # forward pass over model
+                vis_features = encoder(images)
+                output = decoder(vis_features, captions, lengths)
+
+                # get targets (packed because of padding of the captions)
+                targets = pack_padded_sequence(captions, lengths, batch_first=True)[0]
+
+                # compute loss function
+                loss_val = loss_fun(output, targets)
 
         # Update
         loss_val_cpu = loss_val.item()
@@ -70,26 +86,21 @@ def train(encoder, decoder, optimizer, loss_fun, loader, ep, device, history, ar
         progress_bar.update(1)
     progress_bar.close()
 
-    return encoder, decoder, optimizer, history
+    return intermed_loss / n_intermed_updates, encoder, decoder, optimizer, history
 
 
-def preprocess_images(config):
+def preprocess_images(path_images, path_output, img_resize, dataset):
     """
     only do preprocessing if not yet done before.
     Preprocessing is considered as done before if output path exists and is not empty
     """
-    path_images = config.path_images
-    img_resize = config.img_resize
-    path_output = config.path_images_preprocessed
 
     try:
         # if these operations run, then the directory exists
         list_output_path = os.listdir(path_output)
         test = list_output_path[0]
-        tqdm.write("\tPreprocessing already done.")
-
+        tqdm.write("\tPreprocessing {} images already done.".format(dataset))
     except:
-
         # generate output path
         if not os.path.exists(path_output):
             os.makedirs(path_output)
@@ -109,9 +120,6 @@ def preprocess_images(config):
                 img.save(os.path.join(path_output, image_name), format)
                 progress_bar.update(1)
         progress_bar.close()
-
-        # delete folder
-        # os.rmdir(path_images)
 
 
 def save_model(ep, encoder, decoder, optimizer, folder):

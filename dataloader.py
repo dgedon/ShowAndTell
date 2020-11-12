@@ -66,11 +66,10 @@ class ImageCaptionBatcher:
         return images, captions, cap_lengths
 
 
-def get_dataloaders(config, vocab, mean, std, shuffle=True):
+def get_dataloaders(path_images, path_captions,config, vocab, mean, std, shuffle=True):
     batch_size = config.batch_size
-    path_images = config.path_images_preprocessed
-    path_captions = config.path_captions
 
+    # transformation
     transform = transforms.Compose([
         transforms.RandomCrop(config.img_rand_crop),
         transforms.RandomHorizontalFlip(),
