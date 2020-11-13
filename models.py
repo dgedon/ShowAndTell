@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torchvision.models as models
 from torch.nn.utils.rnn import pack_padded_sequence
+import numpy as np
 
 
 class Encoder(nn.Module):
@@ -95,4 +96,40 @@ class Decoder(nn.Module):
         # generate list of samples
         sample = [id.item() for id in sample_ids]
 
+        return sample
+
+    def beam_search_sample(self, vis_feat, beam_size, hidden_rnn=None):
+        # define Softmax
+        m = nn.Softmax(dim=2)
+        # first input to rnn are the visual features
+        inp = vis_feat.unsqueeze(0)
+        # allocate sample beams; log prob, current sentence, current layer, next input
+        sample_beams = [[0.0, [], hidden_rnn, inp]]
+        # for at most self.max_words steps
+        for _ in range(self.max_words):
+            # allocate possible candidates
+            all_candidates = []
+            for sample in sample_beams:
+                # rnn outputs
+                out_rnn, new_hidden_rnn = self.rnn(sample[3], sample[2])
+                # linear layer
+                out_lin_1 = self.lin_layer(out_rnn)
+                # Softmax the previous layer
+                out_lin = m(out_lin_1)
+                # Find the values and indices of k largest values
+                k_vals, k_inds = torch.topk(out_lin, beam_size)
+                k_vals, k_inds = k_vals.detach().numpy(), k_inds.detach().numpy()
+                for i in range(beam_size):
+                    # next input
+                    inp = self.embedding(torch.tensor(k_inds[0][0][i])).view(1, 1, -1)
+                    # Create new candidates; new sentence, new log prob, new layer, next input
+                    candidate = [sample[0] - np.log(k_vals[0][0][i]), sample[1] + [k_inds[0][0][i]], new_hidden_rnn,
+                                 inp]
+                    all_candidates.append(candidate)
+            # Sort the candidates
+            all_candidates.sort(key=lambda x: x[0])
+            # Take the top k
+            sample_beams = all_candidates[:beam_size]
+        # Take the best candidate
+        sample = sample_beams[0][1]
         return sample

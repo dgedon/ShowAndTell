@@ -87,7 +87,10 @@ def train(encoder, decoder, optimizer, loss_fun, loader, ep, device, history, ar
         progress_bar.update(1)
     progress_bar.close()
 
-    return intermed_loss / n_intermed_updates, encoder, decoder, optimizer, history
+    # return an averaged loss
+    return_loss = intermed_loss / n_intermed_updates if do_train else total_loss / n_total_updates
+
+    return return_loss, encoder, decoder, optimizer, history
 
 
 def preprocess_images(path_images, path_output, img_resize, dataset):

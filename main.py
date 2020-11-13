@@ -60,14 +60,16 @@ if __name__ == '__main__':
     # inference parameter
     parser.add_argument('--max_words', type=int, default=25,
                         help='maximal number of words per caption (default: 20)')
+    parser.add_argument('--beam_size', type=int, default=5,
+                        help='size of beam for beam search (default: 5)')
     parser.add_argument('--path_test_image', default=os.getcwd() + '/data/test_data/example.png',
                         help='maximal number of words per caption (default: 20)')
     # system settings
     parser.add_argument('--folder', default=os.getcwd() + '/trained_model1',
                         help='storage folder, where the model will be stored')
-    parser.add_argument('--save_hist_every', type=int, default=100,
+    parser.add_argument('--save_hist_every', type=int, default=250,
                         help='save the history as average of every n iterations (default: 50)')
-    parser.add_argument('--save_model_every', type=int, default=200,
+    parser.add_argument('--save_model_every', type=int, default=500,
                         help='save the model after every n iterations (default: 500)')
     parser.add_argument('--no_training', type=bool, default=True,
                         help='if set True then no training but only evaluation is done (default: False)')
@@ -99,36 +101,36 @@ if __name__ == '__main__':
     vocab_size = len(vocab)
     tqdm.write("Done!")
 
-    tqdm.write("\nSet train/valid loader...")
-    # channel wise empirical mean and std for normalisation
-    mean = (0.485, 0.456, 0.406)
-    std = (0.229, 0.224, 0.225)
-    # get data and set loaders
-    train_loader = get_dataloaders(args.path_train_images_preprocessed, args.path_train_captions,
-                                   args, vocab, mean, std)
-    valid_loader = get_dataloaders(args.path_valid_images_preprocessed, args.path_valid_captions,
-                                   args, vocab, mean, std)
-    tqdm.write("Done!")
-
     tqdm.write("\nInitialise model...")
     # initialise the model
     encoder = Encoder(args).to(device=device)
     decoder = Decoder(args, vocab_size).to(device=device)
     tqdm.write("Done!")
 
-    tqdm.write("\nDefine optimizer...")
-    # for encoder do not use cnn as parameters, for decoder use all parameters
-    param2optim = list(encoder.lin_layer.parameters()) + \
-                  list(encoder.batch_norm.parameters()) + \
-                  list(decoder.parameters())
-    optimizer = torch.optim.Adam(param2optim, args.lr)
-    tqdm.write("Done!")
-
-    tqdm.write("\nDefine loss criterion...")
-    loss_crit = nn.CrossEntropyLoss()
-    tqdm.write("Done!")
-
+    # channel wise empirical mean and std for normalisation
+    mean = (0.485, 0.456, 0.406)
+    std = (0.229, 0.224, 0.225)
     if not args.no_training:
+        tqdm.write("\nSet train/valid loader...")
+        # get data and set loaders
+        train_loader = get_dataloaders(args.path_train_images_preprocessed, args.path_train_captions,
+                                       args, vocab, mean, std)
+        valid_loader = get_dataloaders(args.path_valid_images_preprocessed, args.path_valid_captions,
+                                       args, vocab, mean, std)
+        tqdm.write("Done!")
+
+        tqdm.write("\nDefine optimizer...")
+        # for encoder do not use cnn as parameters, for decoder use all parameters
+        param2optim = list(encoder.lin_layer.parameters()) + \
+                      list(encoder.batch_norm.parameters()) + \
+                      list(decoder.parameters())
+        optimizer = torch.optim.Adam(param2optim, args.lr)
+        tqdm.write("Done!")
+
+        tqdm.write("\nDefine loss criterion...")
+        loss_crit = nn.CrossEntropyLoss()
+        tqdm.write("Done!")
+
         tqdm.write("\nRun training...")
         history = pd.DataFrame(columns=["epoch", "n_updates", "loss", "perplexity"])
         # training can be interrupted by keyboard interrupt
@@ -195,7 +197,8 @@ if __name__ == '__main__':
     decoder.eval()
     # Generate an caption from the image
     vis_features = encoder(image_tensor)
-    sampled_ids = decoder.sample(vis_features)
+    # sampled_ids = decoder.sample(vis_features)
+    sampled_ids = decoder.beam_search_sample(vis_features, args.beam_size)
 
     # obtain sentence from word ids
     tokens = vocab.decode(sampled_ids)
