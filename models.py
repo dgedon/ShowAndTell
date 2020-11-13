@@ -50,9 +50,11 @@ class Decoder(nn.Module):
         self.hidden_dim = config.hidden_dim
         self.num_layers = config.num_layers
         self.vocab_size = vocab_size
+        self.dropout_val = config.dropout
 
-        # word embeddings
+        # decoder layers
         self.embedding = nn.Embedding(self.vocab_size, self.embed_dim)
+        self.dropout = nn.Dropout(self.dropout_val)
         self.rnn = nn.LSTM(self.embed_dim, self.hidden_dim, self.num_layers, batch_first=True)
         self.lin_layer = nn.Linear(self.hidden_dim, self.vocab_size)
 
@@ -64,9 +66,11 @@ class Decoder(nn.Module):
         length = list of length max_length
         """
         # get embeddings of captions
-        emb = self.embedding(captions)
+        emb1 = self.embedding(captions)
+        # dropout on embeddings
+        emb2 = self.dropout(emb1)
         # combine visual features with embeddings
-        inp = torch.cat([vis_feat.unsqueeze(1), emb], 1)
+        inp = torch.cat([vis_feat.unsqueeze(1), emb2], 1)
         # pack in packed sequence because of padding (otherwise we just learn padding)
         inp_packed = pack_padded_sequence(inp, lengths, batch_first=True)
         # rnn forward pass. Hidden states are initialised with zero since it is not differently defined

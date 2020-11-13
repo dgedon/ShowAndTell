@@ -57,6 +57,8 @@ if __name__ == '__main__':
                         help='dimension of hidden rnn states (default: 512)')
     parser.add_argument('--num_layers', type=int, default=1,
                         help='number of rnn layers (default: 1)')
+    parser.add_argument('--dropout', type=float, default=0.3,
+                        help='dropout of embeddings (default: 0.3)')
     # inference parameter
     parser.add_argument('--max_words', type=int, default=25,
                         help='maximal number of words per caption (default: 20)')
@@ -65,13 +67,13 @@ if __name__ == '__main__':
     parser.add_argument('--path_test_image', default=os.getcwd() + '/data/test_data/example.png',
                         help='maximal number of words per caption (default: 20)')
     # system settings
-    parser.add_argument('--folder', default=os.getcwd() + '/trained_model1',
+    parser.add_argument('--folder', default=os.getcwd() + '/trained_model2',
                         help='storage folder, where the model will be stored')
     parser.add_argument('--save_hist_every', type=int, default=250,
                         help='save the history as average of every n iterations (default: 50)')
     parser.add_argument('--save_model_every', type=int, default=500,
                         help='save the model after every n iterations (default: 500)')
-    parser.add_argument('--no_training', type=bool, default=True,
+    parser.add_argument('--no_training', type=bool, default=False,
                         help='if set True then no training but only evaluation is done (default: False)')
     args = parser.parse_args()
 
