@@ -68,19 +68,20 @@ def train(encoder, decoder, optimizer, loss_fun, loader, ep, device, history, ar
         intermed_loss += loss_val_cpu
         n_intermed_updates += 1
 
-        # update history
-        if n_total_updates % args.save_hist_every == 0:
-            history = history.append({"epoch": ep, "n_updates": ep * len(loader) + n_total_updates,
-                                      "loss": intermed_loss / n_intermed_updates,
-                                      "perplexity": np.exp(intermed_loss / n_intermed_updates)}, ignore_index=True)
-            history.to_csv(os.path.join(args.folder, 'history.csv'), index=False)
-            # reset variables
-            intermed_loss = 0
-            n_intermed_updates = 0
+        if do_train:
+            # update history
+            if n_total_updates % args.save_hist_every == 0:
+                history = history.append({"epoch": ep, "n_updates": ep * len(loader) + n_total_updates,
+                                          "loss": intermed_loss / n_intermed_updates,
+                                          "perplexity": np.exp(intermed_loss / n_intermed_updates)}, ignore_index=True)
+                history.to_csv(os.path.join(args.folder, 'history.csv'), index=False)
+                # reset variables
+                intermed_loss = 0
+                n_intermed_updates = 0
 
-        # save model
-        if n_total_updates % args.save_model_every == 0:
-            save_model(ep, encoder, decoder, optimizer, args.folder)
+            # save model
+            if n_total_updates % args.save_model_every == 0:
+                save_model(ep, encoder, decoder, optimizer, args.folder)
 
         # Update train bar
         progress_bar.desc = process_desc.format(ep, loss_val_cpu, np.exp(loss_val_cpu))
