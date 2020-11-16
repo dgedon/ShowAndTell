@@ -199,7 +199,9 @@ if __name__ == '__main__':
     decoder.eval()
     # Generate an caption from the image
     vis_features = encoder(image_tensor)
-    # sampled_ids = decoder.sample(vis_features)
+    #sampled_ids = decoder.sample(vis_features)
+    decoder = decoder.to(device=torch.device("cpu"))
+    vis_features = vis_features.to(device=torch.device("cpu"))
     sampled_ids = decoder.beam_search_sample(vis_features, args.beam_size)
 
     # obtain sentence from word ids

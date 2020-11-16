@@ -122,12 +122,14 @@ class Decoder(nn.Module):
                 out_lin = m(out_lin_1)
                 # Find the values and indices of k largest values
                 k_vals, k_inds = torch.topk(out_lin, beam_size)
-                k_vals, k_inds = k_vals.detach().numpy(), k_inds.detach().numpy()
+                k_vals, k_inds = k_vals.squeeze(), k_inds.squeeze()
                 for i in range(beam_size):
                     # next input
-                    inp = self.embedding(torch.tensor(k_inds[0][0][i])).view(1, 1, -1)
+                    inp = self.embedding(k_inds[i]).view(1, 1, -1)
                     # Create new candidates; new sentence, new log prob, new layer, next input
-                    candidate = [sample[0] - np.log(k_vals[0][0][i]), sample[1] + [k_inds[0][0][i]], new_hidden_rnn,
+                    candidate = [sample[0] - np.log(k_vals[i].detach().numpy()),
+                                 sample[1] + [k_inds[i]],
+                                 new_hidden_rnn,
                                  inp]
                     all_candidates.append(candidate)
             # Sort the candidates
