@@ -67,7 +67,7 @@ if __name__ == '__main__':
     parser.add_argument('--path_test_image', default=os.getcwd() + '/data/test_data/example.png',
                         help='maximal number of words per caption (default: 20)')
     # system settings
-    parser.add_argument('--folder', default=os.getcwd() + '/trained_model2',
+    parser.add_argument('--folder', default=os.getcwd() + '/trained_model1',
                         help='storage folder, where the model will be stored')
     parser.add_argument('--save_hist_every', type=int, default=250,
                         help='save the history as average of every n iterations (default: 50)')
