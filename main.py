@@ -93,11 +93,6 @@ if __name__ == '__main__':
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     tqdm.write("Using {}!".format(device))
 
-    tqdm.write("\nPre-process images...")
-    preprocess_images(args.path_train_images, args.path_train_images_preprocessed, args.img_resize, 'train')
-    preprocess_images(args.path_valid_images, args.path_valid_images_preprocessed, args.img_resize, 'valid')
-    tqdm.write("Done!")
-
     tqdm.write("\nConstruct / Load vocabulary...")
     vocab = get_vocabulary(args)
     vocab_size = len(vocab)
@@ -113,6 +108,11 @@ if __name__ == '__main__':
     mean = (0.485, 0.456, 0.406)
     std = (0.229, 0.224, 0.225)
     if not args.no_training:
+        tqdm.write("\nPre-process images...")
+        preprocess_images(args.path_train_images, args.path_train_images_preprocessed, args.img_resize, 'train')
+        preprocess_images(args.path_valid_images, args.path_valid_images_preprocessed, args.img_resize, 'valid')
+        tqdm.write("Done!")
+
         tqdm.write("\nSet train/valid loader...")
         # get data and set loaders
         train_loader = get_dataloaders(args.path_train_images_preprocessed, args.path_train_captions,
